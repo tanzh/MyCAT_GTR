@@ -4,7 +4,8 @@
 #endcode end
 #complie=true/false
 #
-#Author: tanzh
+#Author: tanzh(qq:405924341)
+#Inspired by eric.cheng(qq:4897393)
 #Date: 20180112
 #Description:
 #Usage:
