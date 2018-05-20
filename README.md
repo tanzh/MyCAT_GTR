@@ -16,7 +16,7 @@
 2、把工具拷贝到linux服务器  
 3、在mycat_gtr本地安装mysql，my.cnf配置innodb_buffer_pool_size至少1G，关闭binlog  
 4、配置config.ini、schema.xml，具体配置项有说明  
-5、通过sh mycat_gtr.sh运行 
+5、通过sh mycat_gtr.sh运行   
 6、自动修复建议在停机后操作  
 
 表结构说明：    
