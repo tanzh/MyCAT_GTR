@@ -1,7 +1,6 @@
 程序作用：
 1、mycat全局表不一致校验和修复
-2、自动修复建议在停机后操作
-3、也可以用于主从复制检查
+2、也可以用于主从复制检查
 
 环境要求：
 1、在schema.xml中配置db节点，在config.ini中配置相关参数
@@ -15,6 +14,7 @@
 3、在mycat_gtr本地安装mysql，my.cnf配置innodb_buffer_pool_size至少1G，关闭binlog
 4、配置config.ini、schema.xml，具体配置项有说明
 5、通过sh mycat_gtr.sh运行
+6、自动修复建议在停机后操作
 
 表结构说明：
 global_table_id       #存储全局表id，数据为【临时】存储，下次校验时会被清空
