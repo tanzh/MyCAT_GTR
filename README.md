@@ -28,6 +28,9 @@ global_table_id_differ  #对有差异的chunk根据id进行检查，差异id存�
 bak_table_name    #修复前的备份表，数据为【永久性】存储，下次校验时不会被清空  
 
 
+详情请查看【mycat_gtr\doc\mycat_gtr详细说明.docx】
+
+
 tips    
 @Author: tanzh(qq:405924341)  
 @Inspired by eric.cheng(qq:4897393) 
