@@ -1,0 +1,21 @@
+<!--
+@Author: tanzh
+@Date: 20171227
+@Description:
+兼容mycat配置文件
+dataNode表示db节点，一个mysql实例上有可能有多个db
+dataHost表示mysql实例节点，writeHost对应实例信息
+-->
+<mycat:schema xmlns:mycat="http://org.opencloudb/">
+
+    <dataNode name="dn1" dataHost="dn1_Host" database="db1" />
+    <dataNode name="dn2" dataHost="dn2_Host" database="db2" />
+
+    <dataHost name="dn1_Host" >
+        <writeHost url="192.168.147.128:3306" user="root" password="root" />
+    </dataHost>
+    <dataHost name="dn2_Host" >
+        <writeHost url="192.168.147.128:3306" user="root" password="root" />
+    </dataHost>
+    
+</mycat:schema>
