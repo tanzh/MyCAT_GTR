@@ -7,9 +7,9 @@
 
 
 环境要求：   
-1、在schema.xml中配置db节点，在config.ini中配置相关参数 
-2、python 2.6.6，其他版本未测试  
-3、全局表表必须要有主键，主键必须只有一个字段 
+1、在schema.xml中配置db节点，在config.ini中配置相关参数     
+2、python 2.6.6，其他版本未测试    
+3、全局表表必须要有主键，主键必须只有一个字段     
 4、依赖库：DBUtils、pymysql 
 
 部署运行：   
@@ -21,10 +21,10 @@
 
 表结构说明：    
 global_table_id       #存储全局表id，数据为【临时】存储，下次校验时会被清空  
-global_table_chunk      #把global_table_id分成多个chunk去检查，检查结果存放到该表，数据为【临时】存储，下次校验时会被清空 
-global_table_chunk_differ   #有差异的chunk存放到该表，数据为【临时】存储，下次校验时会被清空 
+global_table_chunk      #把global_table_id分成多个chunk去检查，检查结果存放到该表，数据为【临时】存储，下次校验时会被清空       
+global_table_chunk_differ   #有差异的chunk存放到该表，数据为【临时】存储，下次校验时会被清空     
 global_table_status   #记录程序运行记录和状态，数据为【永久性】存储，下次校验时不会被清空  
-global_table_id_differ  #对有差异的chunk根据id进行检查，差异id存放到该表，数据为【永久性】存储，下次校验时不会被清空 
+global_table_id_differ  #对有差异的chunk根据id进行检查，差异id存放到该表，数据为【永久性】存储，下次校验时不会被清空     
 bak_table_name    #修复前的备份表，数据为【永久性】存储，下次校验时不会被清空  
 
 
