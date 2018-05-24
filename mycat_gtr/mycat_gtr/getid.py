@@ -55,7 +55,7 @@ def run(global_table_g, local_mysql_pool_g, node_pool_list_g,parallel_num_g,geti
         local_mysql_process = dbconn.getProcess(local_mysql_pool_g)
         local_mysql_process_list.append({"database": row["database"], "process": local_mysql_process})
         node_process = dbconn.getProcess(row["pool"])
-        node_process_list.append({"database": row["database"], "process": node_process})
+        node_process_list.append({"database": row["database"],"datanode": row["datanode"], "process": node_process})
     local_mysql_process_per = dbconn.getProcess(local_mysql_pool_g)  # 专门用于计算百分比
 
     logger.info(u"开始获取相关节点全局表id")
