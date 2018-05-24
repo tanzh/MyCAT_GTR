@@ -77,7 +77,7 @@ def __create_tmp_table():
           ) comment "每个分片节点具体的id"' % primary_key_type
     local_mysql_process=local_mysql_process_list[0]["process"]
     for row in node_process_list:
-        new_table_name = global_table + "_" + row["database"]      #拼接表名
+        new_table_name = global_table + "_" + row["datanode"]      #拼接表名
         sql = sql_innodb.replace("global_table_template",new_table_name)  #替换表名
         sql_drop="drop table if exists %s" % new_table_name
         local_mysql_process.ddl(sql_drop)        #先删除

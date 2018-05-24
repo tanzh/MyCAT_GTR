@@ -102,18 +102,18 @@ if timr_format not in ('str', 'int'):
     sys.exit(0)
 
 #找出datahost信息
-#格式：[{'dataHost': {'host': '192.168.147.231', 'port': '3306', 'user': 'root','password':'root'}, 'database': 'db1'}, {'dataHost': {'host': '192.168.147.232', 'port': '3306', 'user': 'root','password':'root'}, 'database': 'db2'}]
+#格式：[{'dataHost': {'host': '192.168.147.231', 'port': '3306', 'user': 'root','password':'root'}, 'database': 'db1','datanode':'node1'}, {'dataHost': {'host': '192.168.147.232', 'port': '3306', 'user': 'root','password':'root'}, 'database': 'db2','datanode':'node1'}]
 tree = ET.parse('schema.xml')
 root = tree.getroot()
 datahost_list = []
 for row1 in root.findall('dataNode'):
     for row2 in root.findall('dataHost'):
             if row1.attrib['dataHost'] == row2.attrib['name']:
-                datahost_list.append({"dataHost": {"host":row2.find('writeHost').attrib['url'].split(":")[0],"port":row2.find('writeHost').attrib['url'].split(":")[1],"user":row2.find('writeHost').attrib['user'],"password":row2.find('writeHost').attrib['password']}, "database": row1.attrib["database"]})
+                datahost_list.append({"dataHost": {"host":row2.find('writeHost').attrib['url'].split(":")[0],"port":row2.find('writeHost').attrib['url'].split(":")[1],"user":row2.find('writeHost').attrib['user'],"password":row2.find('writeHost').attrib['password']}, "database": row1.attrib["database"], "datanode": row1.attrib["name"]})
 logger.debug('datahost_list add host information:%s' % datahost_list)
 
 #初始化各个节点连接池，节点连接池是基于db的，如果一个mysql有多个db则创建多个连接池；同时因为需要读取大表主键id，所以用流式游标
-#node_pool_list格式：[{'database': 'db1','pool':node_pool},{'database': 'db2','pool',node_pool}]
+#node_pool_list格式：[{'database': 'db1','datanode':'node1','pool':node_pool},{'database': 'db2','datanode':'node2','pool',node_pool}]
 node_pool_list = []
 for row in datahost_list:
     try:
@@ -121,10 +121,14 @@ for row in datahost_list:
     except:
         logger.error(u'%s节点无法连接，请检查schema.xml配置' % row["database"])
         sys.exit(1)
-    node_pool_list.append({"database":row["database"],"pool":node_pool})
+    node_pool_list.append({"database":row["database"],"datanode":row["datanode"],"pool":node_pool})
 
 #初始化本地mysql连接池，初始化连接数数量以节点数量为准
-local_mysql_pool = dbpool.getPool(mysql_host,mysql_port,mysql_user,mysql_password,mysql_db,len(datahost_list),pymysql.cursors.SSDictCursor)
+try:
+    local_mysql_pool = dbpool.getPool(mysql_host,mysql_port,mysql_user,mysql_password,mysql_db,len(datahost_list),pymysql.cursors.SSDictCursor)
+except:
+    logger.error(u'本地mysql无法连接，请检查config.ini配置')
+    sys.exit(1)
 
 #如果cpu数量小于parallel_num，则并发数量以当前cpu数量为准
 # if cpu_count() < parallel_num:

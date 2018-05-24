@@ -87,31 +87,39 @@ def check(global_table,node_pool_list,local_mysql_pool,mysql_db,time_column,timr
     #获取time_value
     time_value = None
     if run_mode in (0, 2):
+        #需要循环所有节点，因为可能某个节点没有数据
         for row in node_pool_list:
             node_process = dbconn.getProcess(row["pool"])
-            sql="select %s from %s limit 1;" % (time_column,global_table)
+            sql="select * from information_schema.COLUMNS where TABLE_SCHEMA='%s' and TABLE_NAME='%s' and COLUMN_NAME='%s'" % (row["database"],global_table,time_column)
             sql_result = node_process.selectAll(sql)
             if sql_result:
-                sql_result=sql_result[0][time_column]
-                if timr_format == 'str':
-                    #"%s占位符是sql_result[0][time_column]
-                    #"转换成元组：time.strptime(str(sql_result[0][time_column]), '%Y-%m-%d %H:%M:%S')
-                    #"转换成时间戳：time.mktime(time.strptime(str(sql_result[0][time_column]), '%Y-%m-%d %H:%M:%S'))
-                    try:
-                        time.mktime(time.strptime(str(sql_result), '%Y-%m-%d %H:%M:%S'))
-                    except:
-                        logger.error(u"%s字段不是YYYY-MM-DD HH:MM:SS格式或者该字段存在空值" % time_column)
-                        sys.exit(0)
-                    time_value="time.mktime(time.strptime(str('%s'),'%%Y-%%m-%%d %%H:%%M:%%S'))"
-                elif timr_format == 'int':
-                    try:
-                        int(sql_result)
-                    except:
-                        logger.error(u"%s字段不是整型时间戳格式或者该字段存在空值" % time_column)
-                        sys.exit(0)
-                    time_value="'%s'"
-                break
+                sql="select %s from %s limit 1;" % (time_column,global_table)
+                sql_result = node_process.selectAll(sql)
+                if sql_result:
+                    sql_result=sql_result[0][time_column]
+                    if timr_format == 'str':
+                        #"%s占位符是sql_result[0][time_column]
+                        #"转换成元组：time.strptime(str(sql_result[0][time_column]), '%Y-%m-%d %H:%M:%S')
+                        #"转换成时间戳：time.mktime(time.strptime(str(sql_result[0][time_column]), '%Y-%m-%d %H:%M:%S'))
+                        try:
+                            time.mktime(time.strptime(str(sql_result), '%Y-%m-%d %H:%M:%S'))
+                        except:
+                            logger.error(u"%s字段不是YYYY-MM-DD HH:MM:SS格式或者该字段存在空值" % time_column)
+                            sys.exit(0)
+                        time_value="time.mktime(time.strptime(str('%s'),'%%Y-%%m-%%d %%H:%%M:%%S'))"
+                    elif timr_format == 'int':
+                        try:
+                            int(sql_result)
+                        except:
+                            logger.error(u"%s字段不是整型时间戳格式或者该字段存在空值" % time_column)
+                            sys.exit(0)
+                        time_value="'%s'"
+                    break
+            else:
+                logger.error(u"time_column配置错误，不存在字段%s" % time_column)
+                sys.exit(0)
             node_process.dispose()
+        #如果所有都没有数据，则不存在数据
         if not sql_result:
             logger.error(u"%s不存在数据，请检查" % global_table)
             sys.exit(0)
@@ -153,16 +161,6 @@ def check(global_table,node_pool_list,local_mysql_pool,mysql_db,time_column,timr
 
     unique_column_list = []
     if run_mode in (0,2):
-        # 检查是否存在time_column
-        is_time_column=0
-        sql = "desc %s" % global_table
-        sql_result = node_process.selectAll(sql)
-        for row in sql_result:
-            if row["Field"] == time_column:
-                is_time_column = 1
-        if is_time_column == 0:
-            logger.error(u"time_column配置错误，不存在字段%s" % time_column)
-            sys.exit(0)
         # 判断表结构是否存在唯一索引，多个唯一索引则返回
         unique_count = None
         sql = "select count(*) as count from information_schema.table_constraints where TABLE_SCHEMA='%s' and TABLE_NAME='%s' and CONSTRAINT_TYPE='UNIQUE'" % (node_pool_list[0]["database"], global_table)
