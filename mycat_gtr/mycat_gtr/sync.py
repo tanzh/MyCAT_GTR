@@ -57,7 +57,7 @@ def run(global_table_g,local_mysql_pool_g,node_pool_list_g,auto_repair_size_g,ba
     #因为就只有mycat-gtr使用这些连接池，所以可以长期持有连接，这样后面节省获取连接的代码量，方便直观
     for row in node_pool_list_g:
         node_process = dbconn_xa.getProcess(row["pool"])
-        node_process_list.append({"database": row["database"], "process": node_process})
+        node_process_list.append({"database": row["database"],"datanode": row["datanode"], "process": node_process})
     local_mysql_process = dbconn_xa.getProcess(local_mysql_pool_g)     #mysql线程用于记录数据
     local_mysql_process_ssd = dbconn_xa.getProcess(local_mysql_pool_g)   #专门用于流式游标读取global_table_id_differ
 
@@ -80,11 +80,11 @@ def __sync_execute(id_differ,global_id_differ):
     logger.info(u"%s='%s'<对所有节点加S锁>" % (primary_key_name,global_id_differ))
     for row in node_process_list:
         node_process = row["process"]
-        logger.info(u"%s='%s'正在对节点%s加锁" % (primary_key_name,global_id_differ, row["database"]))
+        logger.info(u"%s='%s'正在对节点%s加锁" % (primary_key_name,global_id_differ, row["datanode"]))
         #执行上锁，过程中如果遇到错误，则更新is_err
         is_err = node_process.update(sql_share_lock)
         if is_err == -1 or is_err == 'False':
-            logger.error(u"%s='%s'对节点%s加锁失败" % (primary_key_name,global_id_differ,row["database"]))
+            logger.error(u"%s='%s'对节点%s加锁失败" % (primary_key_name,global_id_differ,row["datanode"]))
             logger.info(u"%s='%s'对所有节点回滚事务" % (primary_key_name,global_id_differ))
             for row in node_process_list:
                 node_process = row["process"]
@@ -129,7 +129,7 @@ def __sync_execute(id_differ,global_id_differ):
 
     #存在一个唯一索引，一个id对应一个索引值，或者没有唯一索引，则执行下面修复操作
     #遍历所有节点，根据time_column找出时间最大的记录
-    #latest_line记录最新的一条记录是那一个节点的，格式{"database":db1,"process":process,"timestamp":"时间戳"}
+    #latest_line记录最新的一条记录是那一个节点的，格式{"database":db1,"datanode":nd1,"process":process,"timestamp":"时间戳"}
     latest_line = {}
     time_value_list = []
     time_value_list_tmp = []
@@ -145,11 +145,13 @@ def __sync_execute(id_differ,global_id_differ):
             if latest_line == {}:
                 #如果latest_line是空，则是第一条记录，直接赋值
                 latest_line["database"] = row["database"]
+                latest_line["datanode"] = row["datanode"]
                 latest_line["process"] = row["process"]
                 latest_line["timestamp"] = int(time_value_tmp)
             elif int(time_value_tmp) > int(latest_line["timestamp"]):
                 #如果latest_line不为空，则不是第一条记录，大于之前的时间戳，则记录当前节点信息
                 latest_line["database"] = row["database"]
+                latest_line["datanode"] = row["datanode"]
                 latest_line["process"] = row["process"]
                 latest_line["timestamp"] = int(time_value_tmp)
     # 对各个节点time_value去重，如果所有节点字段时间值都一样，则不自动修复
@@ -181,7 +183,7 @@ def __sync_execute(id_differ,global_id_differ):
         #返回0，结束当前记录的修复
         return 0
     else:
-        logger.info(u"%s='%s'以节点%s数据为准，对所有节点进行修复" % (primary_key_name,global_id_differ, latest_line["database"]))
+        logger.info(u"%s='%s'以节点%s数据为准，对所有节点进行修复" % (primary_key_name,global_id_differ, latest_line["datanode"]))
 
     #修复前先备份各个节点的数据
     logger.info(u"%s='%s'正在备份数据" % (primary_key_name,global_id_differ))
@@ -198,13 +200,13 @@ def __sync_execute(id_differ,global_id_differ):
                 column_name.append(key)
                 column_value.append(value)
                 occupy.append("%s")
-            column_name.append("gtr_source_db")
-            column_value.append(row["database"])
+            column_name.append("gtr_source_dn")
+            column_value.append(row["datanode"])
             occupy.append("%s")
             column_name.append("gtr_differ_id")
             column_value.append(id_differ)
             occupy.append("%s")
-            if row["database"] == latest_line["database"]:
+            if row["datanode"] == latest_line["datanode"]:
                 column_name.append("gtr_repair_standard")
                 column_value.append(1)
                 occupy.append("%s")
@@ -237,7 +239,7 @@ def __sync_execute(id_differ,global_id_differ):
     logger.info(u"%s='%s'<对所有节点修复>" % (primary_key_name,global_id_differ))
     for row in node_process_list:
         node_process = row["process"]
-        logger.info(u"%s='%s'正在对节点%s修复" % (primary_key_name,global_id_differ, row["database"]))
+        logger.info(u"%s='%s'正在对节点%s修复" % (primary_key_name,global_id_differ, row["datanode"]))
         #执行replace into，过程中如果遇到错误，则更新is_err
         #修复bug，参数通过column_value另外传入到dbconn_xa的param，这样可以对特殊字符自动转义，先拼接成一个sql则无法对特殊字符转义
         is_err = node_process.update(sql_repair,column_value)

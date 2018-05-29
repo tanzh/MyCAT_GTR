@@ -53,7 +53,7 @@ def run(global_table_g, local_mysql_pool_g, node_pool_list_g,parallel_num_g,geti
     #因为就只有mycat-gtr使用这些连接池，所以可以长期持有连接，这样后面节省获取连接的代码量，方便直观
     for row in node_pool_list_g:
         local_mysql_process = dbconn.getProcess(local_mysql_pool_g)
-        local_mysql_process_list.append({"database": row["database"], "process": local_mysql_process})
+        local_mysql_process_list.append({"database": row["database"],"datanode": row["datanode"], "process": local_mysql_process})
         node_process = dbconn.getProcess(row["pool"])
         node_process_list.append({"database": row["database"],"datanode": row["datanode"], "process": node_process})
     local_mysql_process_per = dbconn.getProcess(local_mysql_pool_g)  # 专门用于计算百分比
@@ -66,8 +66,8 @@ def run(global_table_g, local_mysql_pool_g, node_pool_list_g,parallel_num_g,geti
     logger.info(u"获取全局表id完成")
 
 
-#每个节点对应创建一个实体表，并把表名和database对应关系添加到node_table_list
-#node_table_list格式：{"database":"db1", "table_name": "table_name_db1"}
+#每个节点对应创建一个实体表，并把表名和分片对应关系添加到node_table_list
+#node_table_list格式：{"datanode":"nd1", "table_name": "table_name_db1"}
 def __create_tmp_table():
     logger.info(u"正在本地mysql创建临时表")
     #临时表模板
@@ -82,7 +82,7 @@ def __create_tmp_table():
         sql_drop="drop table if exists %s" % new_table_name
         local_mysql_process.ddl(sql_drop)        #先删除
         local_mysql_process.ddl(sql)             #后创建
-        node_table_list.append({"database": row["database"], "table_name": new_table_name})    #添加到列表
+        node_table_list.append({"datanode": row["datanode"], "table_name": new_table_name})    #添加到列表
 
 
 # id全部插入到global_table_id以后，则删除临时表，释放连接
@@ -103,10 +103,10 @@ def __drop_tmp_table():
 def __insert_process(node_table):
     logger.debug(u"process(%s) 开启一个连接" % os.getpid())
     for row in node_process_list:
-        if node_table["database"] == row["database"]:
+        if node_table["datanode"] == row["datanode"]:
             node_process = row["process"]
     for row in local_mysql_process_list:
-        if node_table["database"] == row["database"]:
+        if node_table["datanode"] == row["datanode"]:
             local_mysql_process = row["process"]
     logger.debug(u"process(%s) 准备插入" % os.getpid())
     sql = "select %s from %s" % (primary_key_name,global_table)

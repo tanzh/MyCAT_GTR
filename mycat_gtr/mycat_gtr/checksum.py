@@ -48,9 +48,9 @@ def run(global_table_g, local_mysql_pool_g, node_pool_list_g, parallel_num_g,run
     #因为就只有mycat-gtr使用这些连接池，所以可以长期持有连接，这样后面节省获取连接的代码量，方便直观
     for row in node_pool_list_g:
         local_mysql_process = dbconn.getProcess(local_mysql_pool_g)
-        local_mysql_process_list.append({"database": row["database"], "process": local_mysql_process})
+        local_mysql_process_list.append({"database": row["database"],"datanode": row["datanode"], "process": local_mysql_process})
         node_process = dbconn.getProcess(row["pool"])
-        node_process_list.append({"database": row["database"], "process": node_process})
+        node_process_list.append({"database": row["database"],"datanode": row["datanode"], "process": node_process})
     local_mysql_process_ssd = dbconn.getProcess(local_mysql_pool_g)  # 专门用于流式游标读取global_table_chunk_differ
 
     #对所有节点开启事务，RR事务隔离级别，开启事务后，可重复读。借鉴mysqldump，只开启一个事务，事务内用SAVEPOINT保存点，下面每一个chunk的校验后都会返回保存点，读到的数据都会静止，可以降低生产数据变动导致校验不准确的几率。后面不需要对事务回滚，__dispose_process会直接释放
@@ -86,7 +86,11 @@ def __sql_checksum_joint():
     sql_head = "SELECT COUNT(*) AS cnt, COALESCE(LOWER(CONV(BIT_XOR(CAST(CRC32(CONCAT_WS('#',"
     sql_middle = ", CONCAT("
     sql_tail = "))) AS UNSIGNED)), 10, 16)), 0) AS crc FROM %s FORCE INDEX(`PRIMARY`) WHERE ((%s >= '%s')) AND ((%s <= '%s')) "
-    sql_checksum_prepare = " ".join([sql_head,global_table_column_str,sql_middle,global_table_column_isnull_str,sql_tail])
+    if global_table_column_isnull_str:
+        sql_checksum_prepare = " ".join([sql_head,global_table_column_str,sql_middle,global_table_column_isnull_str,sql_tail])
+    else:
+        sql_checksum_prepare = " ".join(
+            [sql_head, global_table_column_str, sql_middle, '1', sql_tail])
 
 
 #检查差异chunk内的每一行记录
@@ -226,7 +230,7 @@ def __chunk_compare():
         this_cnt = None
         for row in node_process_list:
             #一个chunk中，按每个分片节点db去循环检查
-            sql = "select crc,cnt from global_table_chunk where db='%s' and global_table='%s' and chunk=%d" % (row["database"],global_table,chunk)
+            sql = "select crc,cnt from global_table_chunk where dn='%s' and global_table='%s' and chunk=%d" % (row["datanode"],global_table,chunk)
             sql_result = local_mysql_process.selectAll(sql)
             """
             先从结果做判断，如果某个节点没有结果，则认为不一致
@@ -266,18 +270,16 @@ def __chunk_compare():
 
 
 #checksum并发执行函数，把结果记录到global_table_checksums
-def __checksum_parallel(chunk, upper_boundary, lower_boundary, sql_checksum, db_name):
+def __checksum_parallel(chunk, upper_boundary, lower_boundary, sql_checksum, dn_name):
     logger.debug("chunk:%s" % chunk)
     logger.debug("upper_boundary:%s" % upper_boundary)
     logger.debug("lower_boundary:%s" % lower_boundary)
     logger.debug("sql_checksum:%s" % sql_checksum)
-    logger.debug("db_name:%s" % db_name)
-    logger.debug("process(%s) __checksum_parallel.db_name:%s" % (os.getpid(),db_name))
     checksum_begin_time = time.time()
     logger.debug("process(%s) checksum_begin_time:%s" % (os.getpid(),checksum_begin_time))
     for row in node_process_list:
-        if row["database"] == db_name:
-            logger.debug(u"process(%s) node_process_list匹配OK，db是：%s" % (os.getpid(),db_name))
+        if row["datanode"] == dn_name:
+            logger.debug(u"process(%s) node_process_list匹配OK，dn是：%s" % (os.getpid(),dn_name))
             node_process = row["process"]
     #结果返回cnt行数，crc计算的checksum值
     logger.debug(u"process(%s) 开始获取cnt和crc" % os.getpid())
@@ -293,18 +295,18 @@ def __checksum_parallel(chunk, upper_boundary, lower_boundary, sql_checksum, db_
     logger.debug(u"process(%s) 耗时：%d" % (os.getpid(),chunk_time))
     logger.debug(u"process(%s) 把cnt和crc插入到global_table_checksums" % os.getpid())
     sql = "replace into global_table_chunk \
-          (db,global_table,chunk,chunk_time,upper_boundary,lower_boundary,crc,cnt) \
-          values ('%s','%s',%s,%s,'%s','%s','%s',%s)" % (db_name, global_table, chunk, chunk_time, upper_boundary, lower_boundary, crc, cnt)
+          (dn,global_table,chunk,chunk_time,upper_boundary,lower_boundary,crc,cnt) \
+          values ('%s','%s',%s,%s,'%s','%s','%s',%s)" % (dn_name, global_table, chunk, chunk_time, upper_boundary, lower_boundary, crc, cnt)
     for row in local_mysql_process_list:
-        if row["database"] == db_name:
-            logger.debug(u"process(%s) node_mysql_process_list匹配OK，db是：%s" % (os.getpid(), db_name))
+        if row["datanode"] == dn_name:
+            logger.debug(u"process(%s) node_mysql_process_list匹配OK，dn是：%s" % (os.getpid(), dn_name))
             local_mysql_process = row["process"]
     local_mysql_process.insertOne(sql)
     #只提交，不释放，因为下一个chunk还需要
     local_mysql_process.commit()
     logger.debug(u"process(%s) 插入成功，断开连接" % os.getpid())
     #执行结束后，返回当前操作节点名称
-    return db_name
+    return dn_name
 
 
 #checksum入口，获取id上界限和下界限
@@ -371,7 +373,7 @@ def __checksum_init():
         #获取上下界限
         sql_upper_lower_boundary = "select global_id from global_table_id where global_id>='%s' order by global_id limit %s,2" % (tmp_boundary, chunk_size)
         upper_lower_boundary = local_mysql_process.selectAll(sql_upper_lower_boundary)
-        if upper_lower_boundary:
+        if len(upper_lower_boundary) == 2:
             #结果不为空，则交换变量
             logger.debug(u"上下线结果输出：%s" % upper_lower_boundary)
             logger.debug(u"上线结果：%s" % upper_lower_boundary[0]["global_id"])
@@ -390,10 +392,8 @@ def __checksum_init():
         sql_checksum = sql_checksum_prepare % (global_table, primary_key_name,upper_boundary, primary_key_name,lower_boundary)
         logger.debug("parallel process insert")
         for node_process in node_process_list:
-            db_name = node_process["database"]
-            logger.debug("__checksum_parallel_init.node_pool_db:%s" % db_name)
-            logger.debug("%s into process pool" % db_name)
-            p_results.append(p.apply_async(__checksum_parallel,args=(chunk, upper_boundary, lower_boundary, sql_checksum, db_name,)))
+            dn_name = node_process["datanode"]
+            p_results.append(p.apply_async(__checksum_parallel,args=(chunk, upper_boundary, lower_boundary, sql_checksum,dn_name,)))
         for row in p_results:
             row.wait()  #等待进程函数执行完毕
         for row in p_results:

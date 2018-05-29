@@ -61,7 +61,7 @@ def check(global_table,node_pool_list,local_mysql_pool,mysql_db,time_column,timr
         先从结果做判断，如果某个节点没有结果，则认为不一致
        """
         if not sql_result:
-            logger.error(u"节点%s不存在表%s" % (row["database"],global_table))
+            logger.error(u"节点%s不存在表%s" % (row["datanode"],global_table))
             sys.exit(0)
         """
         都有结果了，则从获取的结果判断，上下判断，如果存在不一致就记录
@@ -69,10 +69,12 @@ def check(global_table,node_pool_list,local_mysql_pool,mysql_db,time_column,timr
         if last_table_info is not None:
             # 如果上一个节点表结构不为空，则说明这不是第一个分片，需要和当前chunk比较
             this_table_info = sql_result[0]["Create Table"]
-            # 去掉主键AUTO_INCREMENT和AUTO_INCREMENT=40510
-            this_table_info = re.sub(r"\bAUTO_INCREMENT\S*?\s\b", "", this_table_info, count=2)
+            #去掉主键AUTO_INCREMENT
+            this_table_info = re.sub(r"AUTO_INCREMENT", "", this_table_info, count=1)
+            #去掉AUTO_INCREMENT=40510
+            this_table_info = re.sub(r"\bAUTO_INCREMENT\S*?\s\b", "", this_table_info, count=1)
             if this_table_info != last_table_info:
-                logger.error(u"节点%s表结构不一致" % row["database"])
+                logger.error(u"节点%s表结构不一致" % row["datanode"])
                 sys.exit(0)
             else:
                 #如果一样，则赋值给last_table_info
@@ -80,8 +82,10 @@ def check(global_table,node_pool_list,local_mysql_pool,mysql_db,time_column,timr
         else:
             # 如果上一个节点表结构为空，则说明是第一个db分片，需要赋值给last，用于和下一个对比
             last_table_info = sql_result[0]["Create Table"]
-            # 去掉主键AUTO_INCREMENT和AUTO_INCREMENT=40510
-            last_table_info = re.sub(r"\bAUTO_INCREMENT\S*?\s\b", "", last_table_info, count=2)
+            #去掉主键AUTO_INCREMENT
+            last_table_info = re.sub(r"AUTO_INCREMENT", "", last_table_info, count=1)
+            #去掉AUTO_INCREMENT=40510
+            last_table_info = re.sub(r"\bAUTO_INCREMENT\S*?\s\b", "", last_table_info, count=1)
         node_process.dispose()
 
     #获取time_value
@@ -198,7 +202,7 @@ def create_local_table(global_table,bak_global_table,node_pool_list,local_mysql_
     ) comment '从所有节点去重后的ID，数据来自多个global_table_id_model';\
     CREATE TABLE if not exists global_table_chunk (\
       id int(11) NOT NULL AUTO_INCREMENT COMMENT '主键',\
-      db char(64) NOT NULL COMMENT '库名',\
+      dn char(64) NOT NULL COMMENT '分片节点',\
       global_table varchar(64) NOT NULL COMMENT '全局表名',\
       chunk int(11) NOT NULL COMMENT '第几个chunk',\
       chunk_time float DEFAULT NULL COMMENT '当前块检查耗时',\
@@ -210,7 +214,7 @@ def create_local_table(global_table,bak_global_table,node_pool_list,local_mysql_
       create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',\
       update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',\
       PRIMARY KEY (id),\
-      UNIQUE KEY db (db,global_table,chunk),\
+      UNIQUE KEY dn (dn,global_table,chunk),\
       KEY idx_chunk (chunk)\
     ) ENGINE=InnoDB AUTO_INCREMENT=1183 DEFAULT CHARSET=utf8 COMMENT='记录所有db的chunk，数据来自对global_table_id的分析';\
     CREATE TABLE if not exists global_table_chunk_differ (\
@@ -254,25 +258,27 @@ def create_local_table(global_table,bak_global_table,node_pool_list,local_mysql_
     if sql_result:
         create_bak_table_info = re.sub(global_table, bak_global_table_tmp, sql_result, count=1)
         create_bak_table_info = re.sub("CREATE TABLE", "CREATE TABLE if not exists", create_bak_table_info, count=1)
-        #去掉主键AUTO_INCREMENT和AUTO_INCREMENT=40510
-        create_bak_table_info = re.sub(r"\bAUTO_INCREMENT\S*?\s\b", "", create_bak_table_info, count=2)
+        #去掉主键AUTO_INCREMENT
+        create_bak_table_info = re.sub(r"AUTO_INCREMENT", "", create_bak_table_info, count=1)
+        #去掉AUTO_INCREMENT=40510
+        create_bak_table_info = re.sub(r"\bAUTO_INCREMENT\S*?\s\b", "", create_bak_table_info, count=1)
         local_mysql_process.ddl(create_bak_table_info)
     else:
-        logger.error(u"节点%s不存在表%s" % (node_pool_list[0]["database"], global_table))
+        logger.error(u"节点%s不存在表%s" % (node_pool_list[0]["datanode"], global_table))
         sys.exit(0)
 
-    #给备份表添加字段gtr_source_db，gtr_differ_id，gtr_repair_standard
-    sql = "select COLUMN_NAME from information_schema.COLUMNS where TABLE_SCHEMA='%s' and TABLE_NAME='%s' and COLUMN_NAME in ('gtr_source_db','gtr_differ_id','gtr_repair_standard')" % (mysql_db, bak_global_table_tmp)
+    #给备份表添加字段gtr_source_dn，gtr_differ_id，gtr_repair_standard
+    sql = "select COLUMN_NAME from information_schema.COLUMNS where TABLE_SCHEMA='%s' and TABLE_NAME='%s' and COLUMN_NAME in ('gtr_source_dn','gtr_differ_id','gtr_repair_standard')" % (mysql_db, bak_global_table_tmp)
     sql_result = local_mysql_process.selectAll(sql)
     column_name_list=[]
     if sql_result:
         for row in sql_result:
             column_name_list.append(row["COLUMN_NAME"])
-    if 'gtr_source_db' not in column_name_list:
-        sql = "alter table %s add gtr_source_db varchar(30) comment '来源db'" % bak_global_table_tmp
+    if 'gtr_source_dn' not in column_name_list:
+        sql = "alter table %s add gtr_source_dn varchar(30) comment '来源db'" % bak_global_table_tmp
         local_mysql_process.ddl(sql)
     if 'gtr_repair_standard' not in column_name_list:
-        sql = "alter table %s add gtr_repair_standard tinyint not null default 0 comment '修复标准：1-以这条记录为修复标准' after gtr_source_db" % bak_global_table_tmp
+        sql = "alter table %s add gtr_repair_standard tinyint not null default 0 comment '修复标准：1-以这条记录为修复标准' after gtr_source_dn" % bak_global_table_tmp
         local_mysql_process.ddl(sql)
     if 'gtr_differ_id' not in column_name_list:
         sql = "alter table %s add gtr_differ_id int comment '关联global_table_id_differ的id' after gtr_repair_standard" % bak_global_table_tmp
@@ -301,8 +307,10 @@ def create_local_table(global_table,bak_global_table,node_pool_list,local_mysql_
     sql_result = local_mysql_process.selectAll(sql)
     if sql_result:
         bak_global_table_tmp_info = sql_result[0]["Create Table"]
-        # 去掉主键AUTO_INCREMENT和AUTO_INCREMENT=40510
-        bak_global_table_tmp_info = re.sub(r"\bAUTO_INCREMENT\S*?\s\b", "", bak_global_table_tmp_info, count=2)
+        # 去掉主键AUTO_INCREMENT
+        bak_global_table_tmp_info = re.sub(r"AUTO_INCREMENT", "", bak_global_table_tmp_info, count=1)
+        #去掉AUTO_INCREMENT=40510
+        bak_global_table_tmp_info = re.sub(r"\bAUTO_INCREMENT\S*?\s\b", "", bak_global_table_tmp_info, count=1)
         # 去掉表名
         bak_global_table_tmp_info = re.sub(bak_global_table_tmp, "", bak_global_table_tmp_info, count=1)
     sql="select * from information_schema.tables where TABLE_SCHEMA='%s' and TABLE_NAME='%s';" % (mysql_db,bak_global_table)
@@ -311,8 +319,10 @@ def create_local_table(global_table,bak_global_table,node_pool_list,local_mysql_
         sql = "show create table %s" % bak_global_table
         sql_result = local_mysql_process.selectAll(sql)
         bak_global_table_info = sql_result[0]["Create Table"]
-        # 去掉主键AUTO_INCREMENT和AUTO_INCREMENT=40510
-        bak_global_table_info = re.sub(r"\bAUTO_INCREMENT\S*?\s\b", "", bak_global_table_info, count=2)
+        # 去掉主键AUTO_INCREMENT
+        bak_global_table_info = re.sub(r"AUTO_INCREMENT", "", bak_global_table_info, count=1)
+        #去掉AUTO_INCREMENT=40510
+        bak_global_table_info = re.sub(r"\bAUTO_INCREMENT\S*?\s\b", "", bak_global_table_info, count=1)
         # 去掉表名
         bak_global_table_info = re.sub(bak_global_table, "", bak_global_table_info, count=1)
         #如果表结构不一致，则需要对原表备份重命名
