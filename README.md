@@ -13,7 +13,7 @@
 4、依赖库：DBUtils、pymysql 
 
 部署运行：   
-1、安装依赖库：DBUtils、pymysql 
+1、安装依赖库：DBUtils、pymysql    
 2、把工具拷贝到linux服务器  
 3、在mycat_gtr本地安装mysql，my.cnf配置innodb_buffer_pool_size至少1G，关闭binlog  
 4、配置config.ini、schema.xml，具体配置项有说明  
