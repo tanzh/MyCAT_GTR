@@ -34,4 +34,4 @@ bak_table_name    #修复前的备份表，数据为【永久性】存储，下�
 
 tips    
 @Author: tanzh(qq:405924341)  
-@Inspired by eric.cheng(qq:4897393) 
+@Inspired by eric.chen(qq:4897393) 
